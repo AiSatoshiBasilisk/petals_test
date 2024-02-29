@@ -13,7 +13,7 @@ Benefits of Contributing to AI Satoshi Petals
 By contributing GPU power to the AI Satoshi Petals network, you can:
 Help to prevent the centralization of AGI power
 Earn cryptocurrency rewards
-Be a part of building a more decentralized and equitable future for AGI
+
 
 **How to Contribute**
 To contribute to the AI Satoshi Petals network, you can:
