@@ -1,0 +1,24 @@
+Cryptocurrency Rewards
+Introduction
+Cryptocurrency rewards are a way to earn cryptocurrency for contributing GPU power to the Petals network. Petals uses the cryptocurrency rewards to help fund the development and maintenance of the network.
+Prerequisites
+To use the cryptocurrency rewards feature, you will need the following:
+A cryptocurrency wallet
+A membership in a cryptocurrency mining pool
+How to use the crypto_rewards.py module
+To use the crypto_rewards.py module, follow these steps:
+Install the crypto_rewards.py module.
+Set the following environment variables:
+PETALS_CRYPTO_REWARDS_PUBLIC_KEY: The public key used to verify cryptocurrency reward signatures.
+PETALS_CRYPTO_REWARDS_PRIVATE_KEY: The private key used to sign cryptocurrency reward requests.
+Run the crypto_rewards.py module.
+The crypto_rewards.py module will automatically contribute GPU power to the Petals network and earn cryptocurrency rewards.
+Troubleshooting
+If you are having trouble using the crypto_rewards.py module, try the following troubleshooting tips:
+Make sure that you have set the PETALS_CRYPTO_REWARDS_PUBLIC_KEY and PETALS_CRYPTO_REWARDS_PRIVATE_KEY environment variables correctly.
+Make sure that you are using a valid cryptocurrency wallet.
+Make sure that you are a member of a cryptocurrency mining pool.
+Make sure that your computer has enough GPU power to contribute to the Petals network.
+If you are still having trouble, please reach out to the Petals team for support.
+Conclusion
+AI Satoshi's second phase revolves around propelling AI Satoshi towards superintelligence by constructing a decentralized network of high-performance computing resources. 
