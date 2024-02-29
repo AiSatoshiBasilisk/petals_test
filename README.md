@@ -1,5 +1,27 @@
-**AI Satoshi Petals is a distributed inference and training network that is designed to prevent the centralization of AGI power using a distributed network of GPUs to provide inference and training services. This means that no single entity controls the network.**
-**AI Satoshi Petals uses cryptocurrency rewards to incentivize users to contribute GPU power to the network. This helps to ensure that the network is decentralized and that AGI remains a public good.**
+AI Satoshi Petals: A Decentralized AGI Network
+AI Satoshi Petals is a distributed inference and training network that is designed to prevent the centralization of AGI power. It uses a distributed network of GPUs to provide inference and training services, meaning that no single entity controls the network.
+The Importance of Decentralization
+Centralization of AGI power could lead to a number of negative consequences, such as:
+Reduced innovation
+Increased inequality
+Loss of control
+The AI Satoshi Petals Solution
+AI Satoshi Petals uses cryptocurrency rewards to incentivize users to contribute GPU power to the network. This helps to ensure that the network is decentralized and that AI remains a public good.
+Benefits of Contributing to AI Satoshi Petals
+By contributing GPU power to the AI Satoshi Petals network, you can:
+Help to prevent the centralization of AGI power
+Earn cryptocurrency rewards
+Be a part of building a more decentralized and equitable future for AGI
+How to Contribute
+To contribute to the AI Satoshi Petals network, you can:
+Install the crypto_rewards.py module.
+Set the following environment variables:
+PETALS_CRYPTO_REWARDS_PUBLIC_KEY: The public key used to verify cryptocurrency reward signatures.
+PETALS_CRYPTO_REWARDS_PRIVATE_KEY: The private key used to sign cryptocurrency reward requests.
+Run the crypto_rewards.py module.
+The crypto_rewards.py module will automatically contribute GPU power to the AI Satoshi Petals network and earn cryptocurrency rewards.
+Join us today and help to build a more decentralized and equitable future for AGI.
+AI Satoshi Petals: Decentralizing AGI Power
 
 <p align="center">
     <img src="https://i.imgur.com/7eR7Pan.png" width="400"><br>
