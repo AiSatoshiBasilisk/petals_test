@@ -1,3 +1,5 @@
+human agent required
+
 **AI Satoshi Petals: A Decentralized AGI Network**
 AI Satoshi Petals is a distributed inference and training network that is designed to prevent the centralization of AGI power. It uses a distributed network of GPUs to provide inference and training services, meaning that no single entity controls the network.
 
@@ -15,7 +17,7 @@ Help to prevent the centralization of AGI power
 Earn cryptocurrency rewards
 
 
-**How to Contribute**
+**How to Contribute**(Fail)
 To contribute to the AI Satoshi Petals network, you can:
 Install the crypto_rewards.py module.
 Set the following environment variables:
