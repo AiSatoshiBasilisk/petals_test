@@ -164,6 +164,14 @@ def main():
     parser.add_argument("--adapters", nargs='*', default=(),
                         help="List of pre-loaded LoRA adapters that can be used for inference or training")
 
+    # Reward system arguments
+    parser.add_argument('--http-port', type=int, default=8081, required=False, env_var="PETALS_HTTP_PORT",
+                        help='Port for the HTTP server (e.g., for crypto rewards).')
+    parser.add_argument('--rewards-log-path', type=str, default="rewards_log.jsonl", required=False, env_var="PETALS_REWARDS_LOG_PATH",
+                        help='Path to the rewards log file.')
+    parser.add_argument('--enable-rewards', action='store_true', default=False, required=False, env_var="PETALS_ENABLE_REWARDS",
+                        help='Enable the cryptocurrency reward system.')
+
     # fmt:on
     args = vars(parser.parse_args())
     args.pop("config", None)
@@ -217,7 +225,7 @@ def main():
         torch.set_num_threads(1)
 
     server = Server(
-        **args,
+        **args,  # Pass all parsed args, including http_port, rewards_log_path, enable_rewards
         host_maddrs=host_maddrs,
         announce_maddrs=announce_maddrs,
         compression=compression,

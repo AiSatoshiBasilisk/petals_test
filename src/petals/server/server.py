@@ -9,6 +9,15 @@ import sys
 import threading
 import time
 from typing import Dict, List, Optional, Sequence, Union
+import asyncio
+from aiohttp import web
+import json
+from datetime import datetime, timezone
+
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.backends import default_backend # Though often not explicitly needed for high-level ops
 
 import hivemind
 import psutil
@@ -41,6 +50,8 @@ from petals.utils.random import sample_up_to
 from petals.utils.version import get_compatible_model_repo
 
 logger = get_logger(__name__)
+
+# REWARDS_LOG_FILE = "rewards_log.jsonl" # Will be removed, path now comes from config
 
 
 class Server:
@@ -91,6 +102,9 @@ class Server:
         reachable_via_relay: Optional[bool] = None,
         use_relay: bool = True,
         use_auto_relay: bool = True,
+        http_port: int = 8081, # Default from run_server.py
+        rewards_log_path: str = "rewards_log.jsonl", # Default from run_server.py
+        enable_rewards: bool = False, # Default from run_server.py
         adapters: Sequence[str] = (),
         **kwargs,
     ):
@@ -272,6 +286,145 @@ class Server:
         self.module_container = None
         self.stop = threading.Event()
 
+        # HTTP server related attributes from config
+        self.http_port = http_port
+        self.rewards_log_path = rewards_log_path
+        self.enable_rewards = enable_rewards
+
+        self.web_app = web.Application()
+        self._web_runner = None
+        self._http_server_thread = None
+        self._http_server_loop = None
+
+        if self.enable_rewards:
+            logger.info(f"Reward system enabled. HTTP server will run on port {self.http_port}. Rewards log: {self.rewards_log_path}")
+            self._setup_http_routes()
+        else:
+            logger.info("Reward system is disabled.")
+
+    def _setup_http_routes(self):
+        self.web_app.router.add_get("/hello", self.handle_hello)
+        self.web_app.router.add_post("/crypto_rewards", self.handle_crypto_reward)
+
+    async def handle_hello(self, request: web.Request):
+        return web.Response(text="Hello from Petals HTTP Server")
+
+    def _validate_contribution(self, payload: dict, contributor_public_key_pem_str: str) -> bool:
+        """
+        Validates the contribution data within the payload.
+        """
+        logger.info(f"Validating contribution: {payload} for contributor {contributor_public_key_pem_str[:30]}...")
+
+        gpu_power = payload.get('gpu_power')
+        block_height = payload.get('block_height')
+
+        # Rule 1: Check for presence of fields.
+        if gpu_power is None or block_height is None:
+            logger.warning("Validation failed: gpu_power or block_height missing from payload.")
+            return False
+
+        # Rule 2: Check gpu_power type and value.
+        if not isinstance(gpu_power, (int, float)) or not (gpu_power > 0):
+            logger.warning(f"Validation failed: Invalid gpu_power: {gpu_power}")
+            return False
+
+        # Rule 3: Check block_height type and value.
+        if not isinstance(block_height, int) or not (block_height >= 0):
+            logger.warning(f"Validation failed: Invalid block_height: {block_height}")
+            return False
+
+        logger.info(f"Contribution validated successfully for {contributor_public_key_pem_str[:30]}")
+        return True
+
+    async def handle_crypto_reward(self, request: web.Request):
+        try:
+            try:
+                data = await request.json()
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to decode JSON body: {e}")
+                return web.Response(status=400, text=f"Invalid JSON: {e}")
+
+            payload = data.get("payload")
+            public_key_pem_str = data.get("contributor_public_key_pem_str")
+            signature_hex = data.get("signature_hex")
+
+            if not all([payload, public_key_pem_str, signature_hex]):
+                missing = []
+                if not payload: missing.append("payload")
+                if not public_key_pem_str: missing.append("contributor_public_key_pem_str")
+                if not signature_hex: missing.append("signature_hex")
+                logger.warning(f"Missing required fields: {', '.join(missing)}")
+                return web.Response(status=400, text=f"Missing required fields: {', '.join(missing)}")
+
+            # Deserialize Public Key
+            try:
+                public_key_pem_bytes = public_key_pem_str.encode('utf-8')
+                contributor_public_key = serialization.load_pem_public_key(public_key_pem_bytes, backend=default_backend())
+            except Exception as e:
+                logger.warning(f"Invalid public key format for '{public_key_pem_str[:50]}...': {e}")
+                return web.Response(status=400, text=f"Invalid public key format: {e}")
+
+            # Deserialize Signature
+            try:
+                signature_bytes = bytes.fromhex(signature_hex)
+            except ValueError:
+                logger.warning(f"Invalid signature hex format for signature_hex: {signature_hex}")
+                return web.Response(status=400, text="Invalid signature hex format")
+
+            # Prepare Message for verification
+            try:
+                message_bytes = json.dumps(payload, sort_keys=True).encode('utf-8')
+            except TypeError as e:
+                logger.error(f"Could not serialize payload for signing: {e}", exc_info=True)
+                return web.Response(status=400, text=f"Payload could not be serialized: {e}")
+                
+            # Verify Signature
+            try:
+                contributor_public_key.verify(
+                    signature_bytes,
+                    message_bytes,
+                    ec.ECDSA(hashes.SHA256())
+                )
+                logger.info(f"Successfully verified signature for payload: {payload}, public key: {public_key_pem_str[:50]}...")
+            except InvalidSignature:
+                logger.warning(f"Invalid signature for payload: {payload}, public key: {public_key_pem_str[:50]}...")
+                return web.Response(status=401, text="Invalid signature")
+            except Exception as e:
+                logger.error(f"Error during signature verification: {e}", exc_info=True)
+                return web.Response(status=500, text=f"Error during signature verification: {e}")
+
+            # Validate the contribution details
+            is_valid_contribution = self._validate_contribution(payload, public_key_pem_str)
+            if not is_valid_contribution:
+                logger.warning(f"Contribution validation failed for payload: {payload}, public key: {public_key_pem_str[:50]}...")
+                return web.Response(status=403, text="Contribution validation failed")
+
+            # All checks passed (signature and contribution)
+            # Log the validated reward request to a file
+            reward_record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "contributor_id": public_key_pem_str,
+                "reward_payload": payload,
+                "status": "pending_payment"
+            }
+
+            try:
+                log_entry = json.dumps(reward_record)
+                with open(self.rewards_log_path, 'a') as f: # Use configured path
+                    f.write(log_entry + '\n')
+                logger.info(f"Recorded reward for {reward_record['contributor_id'][:30]}... to {self.rewards_log_path}")
+            except IOError as e:
+                logger.error(f"Failed to write reward to {self.rewards_log_path}: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"An unexpected error occurred while logging reward: {e}", exc_info=True)
+
+            logger.info(f"Received and validated crypto reward request: {payload} from {public_key_pem_str[:30]}...")
+            return web.Response(status=200, text="Reward request received, signature and contribution validated")
+
+        except Exception as e:
+            logger.error(f"Unhandled error in {self.__class__.__name__}.handle_crypto_reward: {e}", exc_info=True)
+            return web.Response(status=500, text="Internal Server Error")
+
     def _choose_num_blocks(self) -> int:
         assert self.device.type in ("cuda", "mps"), (
             "GPU is not available. If you want to run a CPU-only server, please specify --num_blocks. "
@@ -325,7 +478,47 @@ class Server:
         )
         return num_blocks
 
+    def _run_http_server(self):
+        self._http_server_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._http_server_loop)
+
+        async def start_server():
+            self._web_runner = web.AppRunner(self.web_app)
+            await self._web_runner.setup()
+            site = web.TCPSite(self._web_runner, '0.0.0.0', self.http_port) # Use configured port
+            await site.start()
+            logger.info(f"HTTP server started on port {self.http_port}") # Use configured port
+
+        async def cleanup_server():
+            if self._web_runner:
+                logger.info("Cleaning up web runner...")
+                await self._web_runner.cleanup()
+                logger.info("Web runner cleaned up.")
+        
+        try:
+            self._http_server_loop.run_until_complete(start_server())
+            self._http_server_loop.run_forever() # Runs until stop() is called externally
+        except Exception as e:
+            logger.error(f"HTTP server error: {e}", exc_info=True)
+        finally:
+            logger.info("HTTP server loop stopping...")
+            if self._http_server_loop and not self._http_server_loop.is_closed():
+                # Run async cleanup tasks before closing the loop
+                self._http_server_loop.run_until_complete(cleanup_server())
+                logger.info("HTTP server loop stopped.")
+                self._http_server_loop.close()
+            else:
+                logger.info("HTTP server loop was already closed or did not exist.")
+            logger.info("HTTP server thread finished.")
+
+
     def run(self):
+        if self.enable_rewards:
+            self._http_server_thread = threading.Thread(target=self._run_http_server, daemon=True)
+            self._http_server_thread.start()
+        else:
+            self._http_server_thread = None # Ensure it's None if not enabled
+
         while True:
             block_indices = self._choose_blocks()
             self.module_container = ModuleContainer.create(
@@ -421,6 +614,22 @@ class Server:
         self.stop.set()
         if self.module_container is not None and self.module_container.is_alive():
             self.module_container.join(timeout)
+
+        # Shutdown HTTP server
+        if self.enable_rewards and self._http_server_thread is not None:
+            if self._http_server_loop and self._http_server_loop.is_running():
+                logger.info("Stopping HTTP server loop...")
+                self._http_server_loop.call_soon_threadsafe(self._http_server_loop.stop)
+            
+            if self._http_server_thread.is_alive(): # Check if thread is alive before joining
+                logger.info("Joining HTTP server thread...")
+                self._http_server_thread.join(timeout=timeout)
+                if self._http_server_thread.is_alive():
+                    logger.warning("HTTP server thread did not shut down cleanly.")
+            logger.info("HTTP server shut down.")
+        elif not self.enable_rewards:
+            logger.info("Reward system was disabled, no HTTP server to shut down.")
+
 
         if self.reachability_protocol is not None:
             self.reachability_protocol.shutdown()
